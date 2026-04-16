@@ -19,7 +19,8 @@ MAX_CACHE=15
 HOME_DIR=`pwd`
 PROXY_DIR="./.proxy"
 NOPROXY_DIR="./.noproxy"
-TIMEOUT=5
+TIMEOUT=${TIMEOUT:-5}
+PROXY_CMD=${PROXY_CMD:-./proxy}
 MAX_RAND=63000
 PORT_START=1024
 PORT_MAX=65000
@@ -72,6 +73,16 @@ function download_noproxy {
 function clear_dirs {
     rm -rf ${PROXY_DIR}/*
     rm -rf ${NOPROXY_DIR}/*
+}
+
+#
+# start_proxy - starts the proxy command under test
+#
+function start_proxy {
+    port=$1
+    # PROXY_CMD may contain a wrapper such as valgrind plus its options.
+    ${PROXY_CMD} ${port} &> /dev/null &
+    proxy_pid=$!
 }
 
 #
@@ -221,8 +232,7 @@ wait_for_port_use "${tiny_port}"
 # Run the proxy
 proxy_port=$(free_port)
 echo "Starting proxy on ${proxy_port}"
-./proxy ${proxy_port}  &> /dev/null &
-proxy_pid=$!
+start_proxy ${proxy_port}
 
 # Wait for the proxy to start in earnest
 wait_for_port_use "${proxy_port}"
@@ -289,8 +299,7 @@ wait_for_port_use "${tiny_port}"
 # Run the proxy
 proxy_port=$(free_port)
 echo "Starting proxy on port ${proxy_port}"
-./proxy ${proxy_port} &> /dev/null &
-proxy_pid=$!
+start_proxy ${proxy_port}
 
 # Wait for the proxy to start in earnest
 wait_for_port_use "${proxy_port}"
@@ -359,8 +368,7 @@ wait_for_port_use "${tiny_port}"
 # Run the proxy
 proxy_port=$(free_port)
 echo "Starting proxy on port ${proxy_port}"
-./proxy ${proxy_port} &> /dev/null &
-proxy_pid=$!
+start_proxy ${proxy_port}
 
 # Wait for the proxy to start in earnest
 wait_for_port_use "${proxy_port}"
@@ -406,4 +414,3 @@ maxScore=`expr ${MAX_BASIC} + ${MAX_CACHE} + ${MAX_CONCURRENCY}`
 echo ""
 echo "totalScore: ${totalScore}/${maxScore}"
 exit
-

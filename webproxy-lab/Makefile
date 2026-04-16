@@ -13,8 +13,9 @@ ASAN_UBSAN_CFLAGS = -g -O1 -Wall -fsanitize=address,undefined -fno-omit-frame-po
 ASAN_UBSAN_LDFLAGS = -lpthread -fsanitize=address,undefined
 VALGRIND_CFLAGS = -g -O0 -Wall
 SANITIZER_ENV = ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1
+VALGRIND_CMD = valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes
 
-.PHONY: all clean driver-run driver-asan-ubsan proxy-run proxy-asan-ubsan proxy-valgrind tiny-run tiny-asan-ubsan tiny-valgrind
+.PHONY: all clean driver-run driver-asan-ubsan driver-valgrind proxy-run proxy-asan-ubsan proxy-valgrind tiny-run tiny-asan-ubsan tiny-valgrind
 
 all: proxy
 
@@ -38,6 +39,13 @@ driver-asan-ubsan:
 	$(MAKE) -C tiny
 	$(SANITIZER_ENV) ./driver.sh
 
+driver-valgrind:
+	$(MAKE) clean
+	$(MAKE) CFLAGS='$(VALGRIND_CFLAGS)' proxy
+	$(MAKE) -C tiny clean
+	$(MAKE) -C tiny
+	TIMEOUT=15 PROXY_CMD='$(VALGRIND_CMD) --log-file=valgrind-proxy-%p.log ./proxy' ./driver.sh
+
 proxy-run: proxy
 	./proxy $(PROXY_PORT)
 
@@ -49,7 +57,7 @@ proxy-asan-ubsan:
 proxy-valgrind:
 	$(MAKE) clean
 	$(MAKE) CFLAGS='$(VALGRIND_CFLAGS)' proxy
-	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./proxy $(PROXY_PORT)
+	$(VALGRIND_CMD) ./proxy $(PROXY_PORT)
 
 tiny-run:
 	$(MAKE) -C tiny
@@ -71,4 +79,4 @@ handin:
 	(make clean; cd ..; tar cvf $(USER)-proxylab-handin.tar proxylab-handout --exclude tiny --exclude nop-server.py --exclude proxy --exclude driver.sh --exclude port-for-user.pl --exclude free-port.sh --exclude ".*")
 
 clean:
-	rm -f *~ *.o proxy core *.tar *.zip *.gzip *.bzip *.gz
+	rm -f *~ *.o proxy core *.tar *.zip *.gzip *.bzip *.gz valgrind-proxy-*.log
