@@ -16,6 +16,9 @@
                 ],
                 "C_Cpp.default.compilerPath": "/usr/bin/gcc"
             }
+        },
+        "jetbrains": {
+            "backend": "CLion"
         }
     }
 }

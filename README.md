@@ -1,6 +1,6 @@
-# 📘 Docker + VSCode DevContainer 기반 C 개발 환경 구축 가이드 (WebProxyLab)
+# 📘 Docker + DevContainer 기반 C 개발 환경 구축 가이드 (WebProxyLab)
 
-이 문서는 **Windows**와 **macOS** 사용자가 Docker와 VSCode DevContainer 기능을 활용하여 C 개발 및 디버깅 환경을 빠르게 구축할 수 있도록 도와줍니다.
+이 문서는 **Windows**와 **macOS** 사용자가 Docker와 VSCode/CLion DevContainer 기능을 활용하여 C 개발 및 디버깅 환경을 빠르게 구축할 수 있도록 도와줍니다.
 
 [**주의**] 지난 주차와 다른 점만 하시려면 4장부터 7장만 보세요.
 [**주의**] webproxy-lab의 경우 tiny 웹 서버와 proxy 서버 두가지를 구현해야 해서 두가지 debugging 설정을 제공합니다. 이에 대한 설명은 7장에서 설명하니 꼭 읽어보시기 바랍니다.
@@ -35,6 +35,8 @@ Docker는 다음 구성요소로 이루어져 있습니다:
 - 팀원 간 **환경 차이 없이 동일한 개발 환경 구성** 가능
 - `.devcontainer` 폴더에 정의된 설정을 VSCode가 읽어 자동 구성
 
+CLion도 DevContainer를 지원합니다. 이 저장소는 `.devcontainer/devcontainer.json`에 CLion backend 설정을 포함하고, `.run` 폴더에 공유 Run Configuration을 제공해서 CLion에서도 같은 컨테이너 환경을 기준으로 실행할 수 있습니다.
+
 ---
 
 ## 3. Docker Desktop 설치하기
@@ -63,8 +65,12 @@ git clone --depth=1 https://github.com/krafton-jungle/webproxy_lab_docker.git
 ```
 webproxy_lab_docker/
 ├── .devcontainer/
-│   ├── devcontainer.json      # VSCode에서 컨테이너 환경 설정
+│   ├── devcontainer.json      # VSCode/CLion에서 컨테이너 환경 설정
 │   └── Dockerfile             # C 개발 환경 이미지 정의
+│
+├── .run/
+│   ├── clion-run.sh           # CLion 공유 실행 설정에서 호출하는 wrapper
+│   └── *.run.xml              # CLion Run Configuration
 │
 ├── .vscode/
 │   ├── launch.json            # 디버깅 설정 (F5 실행용)
@@ -110,7 +116,34 @@ C 언어로 문제를 풀다가 디버깅이 필요하시면 소스코드에 Bre
 
 ---
 
-## 8. 새로운 Git 리포지토리에 Commit & Push 하기
+## 8. CLion DevContainer에서 실행하기
+
+CLion에서 DevContainer 기능으로 이 프로젝트 폴더를 열면 `.devcontainer/devcontainer.json`의 JetBrains 설정을 사용해 CLion backend가 선택됩니다. 컨테이너를 처음 열 때는 이미지 빌드와 IDE backend 준비 때문에 시간이 걸릴 수 있습니다.
+
+CLion의 Run/Debug Configuration 목록에서 다음 실행 프로필을 사용할 수 있습니다.
+
+- `CLion Tiny Server`: `webproxy-lab/tiny/tiny`를 빌드한 뒤 기본 포트 `8000`으로 실행합니다.
+- `CLion Tiny ASan+UBSan`: Tiny 서버를 AddressSanitizer + UndefinedBehaviorSanitizer 옵션으로 빌드한 뒤 실행합니다.
+- `CLion Tiny Valgrind`: Tiny 서버를 Valgrind로 실행합니다.
+- `CLion Proxy Server`: `webproxy-lab/proxy`를 빌드한 뒤 기본 포트 `4500`으로 실행합니다.
+- `CLion Proxy ASan+UBSan`: Proxy 서버를 AddressSanitizer + UndefinedBehaviorSanitizer 옵션으로 빌드한 뒤 실행합니다.
+- `CLion Proxy Valgrind`: Proxy 서버를 Valgrind로 실행합니다.
+- `CLion Driver`: Proxy Lab 채점 드라이버(`webproxy-lab/driver.sh`)를 실행합니다.
+- `CLion Driver ASan+UBSan`: Proxy 서버를 sanitizer 옵션으로 빌드한 뒤 채점 드라이버를 실행합니다.
+
+기본 포트를 바꾸고 싶다면 CLion 실행 프로필의 script options를 직접 바꾸기보다 터미널에서 아래처럼 Makefile 변수를 지정해서 실행할 수 있습니다.
+
+```bash
+cd webproxy-lab
+make proxy-run PROXY_PORT=4501
+make tiny-run TINY_PORT=8001
+```
+
+공유 실행 프로필은 `.run/clion-run.sh`를 통해 `webproxy-lab` 안의 Makefile 타깃을 호출합니다. 따라서 CLion 설정을 바꾸지 않아도 Makefile 타깃만 조정하면 실행 동작을 바꿀 수 있습니다.
+
+---
+
+## 9. 새로운 Git 리포지토리에 Commit & Push 하기
 
 금주 프로젝트를 개인 Git 리포와 같은 다른 리포지토리에 업로드하려면, 기존 Git 연결을 제거하고 새롭게 초기화해야 합니다.
 

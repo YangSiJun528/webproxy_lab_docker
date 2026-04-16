@@ -4,6 +4,9 @@
 .LSOverride
 ._*
 
+# IDE user state
+.idea/
+
 # Prerequisites
 *.d
 
