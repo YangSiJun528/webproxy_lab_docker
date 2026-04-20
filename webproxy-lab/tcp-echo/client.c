@@ -1,6 +1,7 @@
 #include "csapp.h"
 
 //아니 이거 구현 이미 되어있는거였네;; 삽질 이슈 - 이거 볼 필요 없음
+//구현은 해야 함. 근데 굳이? Getaddrinfo로 IP들 구하기, 소켓 연결 시도하기, 연결 되면 자원 해제하고 소켓 연결 유지하는 패턴은 동일해서
 int open_listenfd(char *port) {
     // Designated Initializer in C 사용 - 나머지 기본값은 binary 0
     struct addrinfo hints = {
