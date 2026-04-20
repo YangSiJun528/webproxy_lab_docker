@@ -9,13 +9,14 @@ CFLAGS = -g -Wall
 LDFLAGS = -lpthread
 PROXY_PORT ?= 4500
 TINY_PORT ?= 8000
+TCP_ECHO_PORT ?= 9000
 ASAN_UBSAN_CFLAGS = -g -O1 -Wall -fsanitize=address,undefined -fno-omit-frame-pointer
 ASAN_UBSAN_LDFLAGS = -lpthread -fsanitize=address,undefined
 VALGRIND_CFLAGS = -g -O0 -Wall
 SANITIZER_ENV = ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1
 VALGRIND_CMD = valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes
 
-.PHONY: all clean driver-run driver-asan-ubsan driver-valgrind proxy-run proxy-asan-ubsan proxy-valgrind tiny-run tiny-asan-ubsan tiny-valgrind
+.PHONY: all clean driver-run driver-asan-ubsan driver-valgrind proxy-run proxy-asan-ubsan proxy-valgrind tiny-run tiny-asan-ubsan tiny-valgrind tcp-echo tcp-echo-clean tcp-echo-server-run tcp-echo-client-run
 
 all: proxy
 
@@ -29,6 +30,7 @@ proxy: proxy.o csapp.o
 	$(CC) $(CFLAGS) proxy.o csapp.o -o proxy $(LDFLAGS)
 
 driver-run: proxy
+	$(MAKE) -C tiny clean
 	$(MAKE) -C tiny
 	./driver.sh
 
@@ -60,6 +62,7 @@ proxy-valgrind:
 	$(VALGRIND_CMD) ./proxy $(PROXY_PORT)
 
 tiny-run:
+	$(MAKE) -C tiny clean
 	$(MAKE) -C tiny
 	cd tiny && ./tiny $(TINY_PORT)
 
@@ -72,6 +75,18 @@ tiny-valgrind:
 	$(MAKE) -C tiny clean
 	$(MAKE) -C tiny CFLAGS='$(VALGRIND_CFLAGS) -I .' all
 	cd tiny && valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./tiny $(TINY_PORT)
+
+tcp-echo:
+	$(MAKE) -C tcp-echo
+
+tcp-echo-clean:
+	$(MAKE) -C tcp-echo clean
+
+tcp-echo-server-run:
+	$(MAKE) -C tcp-echo server-run PORT=$(TCP_ECHO_PORT)
+
+tcp-echo-client-run:
+	$(MAKE) -C tcp-echo client-run HOST=127.0.0.1 PORT=$(TCP_ECHO_PORT)
 
 # Creates a tarball in ../proxylab-handin.tar that you can then
 # hand in. DO NOT MODIFY THIS!
