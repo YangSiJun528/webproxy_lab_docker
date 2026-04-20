@@ -1,61 +1,61 @@
-/* 
- * csapp.c - Functions for the CS:APP3e book
+/*
+ * csapp.c - CS:APP3e 책에서 사용하는 함수들
  *
- * Updated 10/2016 reb:
- *   - Fixed bug in sio_ltoa that didn't cover negative numbers
+ * 2016년 10월 reb 업데이트:
+ *   - sio_ltoa가 음수를 처리하지 못하던 버그를 수정했습니다.
  *
- * Updated 2/2016 droh:
- *   - Updated open_clientfd and open_listenfd to fail more gracefully
+ * 2016년 2월 droh 업데이트:
+ *   - open_clientfd와 open_listenfd가 실패를 더 부드럽게 처리하도록 수정했습니다.
  *
- * Updated 8/2014 droh: 
- *   - New versions of open_clientfd and open_listenfd are reentrant and
- *     protocol independent.
+ * 2014년 8월 droh 업데이트:
+ *   - open_clientfd와 open_listenfd의 새 버전은 재진입 가능하고
+ *     protocol-independent입니다.
  *
- *   - Added protocol-independent inet_ntop and inet_pton functions. The
- *     inet_ntoa and inet_aton functions are obsolete.
+ *   - protocol-independent inet_ntop와 inet_pton 함수를 추가했습니다.
+ *     inet_ntoa와 inet_aton 함수는 더 이상 사용하지 않습니다.
  *
- * Updated 7/2014 droh:
- *   - Aded reentrant sio (signal-safe I/O) routines
- * 
- * Updated 4/2013 droh: 
- *   - rio_readlineb: fixed edge case bug
- *   - rio_readnb: removed redundant EINTR check
+ * 2014년 7월 droh 업데이트:
+ *   - 재진입 가능한 sio(signal-safe I/O) 루틴을 추가했습니다.
+ *
+ * 2013년 4월 droh 업데이트:
+ *   - rio_readlineb: edge case 버그를 수정했습니다.
+ *   - rio_readnb: 중복된 EINTR 검사를 제거했습니다.
  */
 /* $begin csapp.c */
 #include "csapp.h"
 
-/************************** 
- * Error-handling functions
+/**************************
+ * 오류 처리 함수
  **************************/
 /* $begin errorfuns */
 /* $begin unixerror */
-void unix_error(char *msg) /* Unix-style error */
+void unix_error(char *msg) /* Unix 스타일 오류 */
 {
     fprintf(stderr, "%s: %s\n", msg, strerror(errno));
     exit(0);
 }
 /* $end unixerror */
 
-void posix_error(int code, char *msg) /* Posix-style error */
+void posix_error(int code, char *msg) /* Posix 스타일 오류 */
 {
     fprintf(stderr, "%s: %s\n", msg, strerror(code));
     exit(0);
 }
 
-void gai_error(int code, char *msg) /* Getaddrinfo-style error */
+void gai_error(int code, char *msg) /* Getaddrinfo 스타일 오류 */
 {
     fprintf(stderr, "%s: %s\n", msg, gai_strerror(code));
     exit(0);
 }
 
-void app_error(char *msg) /* Application error */
+void app_error(char *msg) /* 애플리케이션 오류 */
 {
     fprintf(stderr, "%s\n", msg);
     exit(0);
 }
 /* $end errorfuns */
 
-void dns_error(char *msg) /* Obsolete gethostbyname error */
+void dns_error(char *msg) /* 구식 gethostbyname 오류 */
 {
     fprintf(stderr, "%s\n", msg);
     exit(0);
@@ -63,7 +63,7 @@ void dns_error(char *msg) /* Obsolete gethostbyname error */
 
 
 /*********************************************
- * Wrappers for Unix process control functions
+ * Unix 프로세스 제어 함수의 래퍼
  ********************************************/
 
 /* $begin forkwrapper */
@@ -145,7 +145,7 @@ pid_t Getpgrp(void) {
 }
 
 /************************************
- * Wrappers for Unix signal functions 
+ * Unix signal 함수의 래퍼
  ***********************************/
 
 /* $begin sigaction */
@@ -154,8 +154,8 @@ handler_t *Signal(int signum, handler_t *handler)
     struct sigaction action, old_action;
 
     action.sa_handler = handler;  
-    sigemptyset(&action.sa_mask); /* Block sigs of type being handled */
-    action.sa_flags = SA_RESTART; /* Restart syscalls if possible */
+    sigemptyset(&action.sa_mask); /* 처리 중인 signal 유형을 차단합니다. */
+    action.sa_flags = SA_RESTART; /* 가능하면 system call을 재시작합니다. */
 
     if (sigaction(signum, &action, &old_action) < 0)
 	unix_error("Signal error");
@@ -208,21 +208,21 @@ int Sigismember(const sigset_t *set, int signum)
 
 int Sigsuspend(const sigset_t *set)
 {
-    int rc = sigsuspend(set); /* always returns -1 */
+    int rc = sigsuspend(set); /* 항상 -1을 반환합니다. */
     if (errno != EINTR)
         unix_error("Sigsuspend error");
     return rc;
 }
 
 /*************************************************************
- * The Sio (Signal-safe I/O) package - simple reentrant output
- * functions that are safe for signal handlers.
+ * Sio(Signal-safe I/O) 패키지 - signal handler에서 안전하게 사용할 수 있는
+ * 단순하고 재진입 가능한 출력 함수들입니다.
  *************************************************************/
 
-/* Private sio functions */
+/* private sio 함수 */
 
 /* $begin sioprivate */
-/* sio_reverse - Reverse a string (from K&R) */
+/* sio_reverse - 문자열을 뒤집습니다(K&R 기반). */
 static void sio_reverse(char s[])
 {
     int c, i, j;
@@ -234,7 +234,7 @@ static void sio_reverse(char s[])
     }
 }
 
-/* sio_ltoa - Convert long to base b string (from K&R) */
+/* sio_ltoa - long 값을 b진수 문자열로 변환합니다(K&R 기반). */
 static void sio_ltoa(long v, char s[], int b) 
 {
     int c, i = 0;
@@ -254,7 +254,7 @@ static void sio_ltoa(long v, char s[], int b)
     sio_reverse(s);
 }
 
-/* sio_strlen - Return length of string (from K&R) */
+/* sio_strlen - 문자열 길이를 반환합니다(K&R 기반). */
 static size_t sio_strlen(char s[])
 {
     int i = 0;
@@ -265,23 +265,23 @@ static size_t sio_strlen(char s[])
 }
 /* $end sioprivate */
 
-/* Public Sio functions */
+/* Public Sio 함수 */
 /* $begin siopublic */
 
-ssize_t sio_puts(char s[]) /* Put string */
+ssize_t sio_puts(char s[]) /* 문자열을 출력합니다. */
 {
     return write(STDOUT_FILENO, s, sio_strlen(s)); //line:csapp:siostrlen
 }
 
-ssize_t sio_putl(long v) /* Put long */
+ssize_t sio_putl(long v) /* long 값을 출력합니다. */
 {
     char s[128];
     
-    sio_ltoa(v, s, 10); /* Based on K&R itoa() */  //line:csapp:sioltoa
+    sio_ltoa(v, s, 10); /* K&R itoa() 기반입니다. */  //line:csapp:sioltoa
     return sio_puts(s);
 }
 
-void sio_error(char s[]) /* Put error message and exit */
+void sio_error(char s[]) /* 오류 메시지를 출력하고 종료합니다. */
 {
     sio_puts(s);
     _exit(1);                                      //line:csapp:sioexit
@@ -289,7 +289,7 @@ void sio_error(char s[]) /* Put error message and exit */
 /* $end siopublic */
 
 /*******************************
- * Wrappers for the SIO routines
+ * SIO 루틴의 래퍼
  ******************************/
 ssize_t Sio_putl(long v)
 {
@@ -315,7 +315,7 @@ void Sio_error(char s[])
 }
 
 /********************************
- * Wrappers for Unix I/O routines
+ * Unix I/O 루틴의 래퍼
  ********************************/
 
 int Open(const char *pathname, int flags, mode_t mode) 
@@ -394,7 +394,7 @@ void Fstat(int fd, struct stat *buf)
 }
 
 /*********************************
- * Wrappers for directory function
+ * 디렉터리 함수의 래퍼
  *********************************/
 
 DIR *Opendir(const char *name) 
@@ -427,7 +427,7 @@ int Closedir(DIR *dirp)
 }
 
 /***************************************
- * Wrappers for memory mapping functions
+ * 메모리 매핑 함수의 래퍼
  ***************************************/
 void *Mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset) 
 {
@@ -445,7 +445,7 @@ void Munmap(void *start, size_t length)
 }
 
 /***************************************************
- * Wrappers for dynamic storage allocation functions
+ * 동적 저장 공간 할당 함수의 래퍼
  ***************************************************/
 
 void *Malloc(size_t size) 
@@ -481,7 +481,7 @@ void Free(void *ptr)
 }
 
 /******************************************
- * Wrappers for the Standard I/O functions.
+ * 표준 I/O 함수의 래퍼
  ******************************************/
 void Fclose(FILE *fp) 
 {
@@ -541,8 +541,8 @@ void Fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
 }
 
 
-/**************************** 
- * Sockets interface wrappers
+/****************************
+ * Socket 인터페이스 래퍼
  ****************************/
 
 int Socket(int domain, int type, int protocol) 
@@ -596,7 +596,7 @@ void Connect(int sockfd, struct sockaddr *serv_addr, int addrlen)
 }
 
 /*******************************
- * Protocol-independent wrappers
+ * Protocol-independent 래퍼
  *******************************/
 /* $begin getaddrinfo */
 void Getaddrinfo(const char *node, const char *service, 
@@ -642,10 +642,10 @@ void Inet_pton(int af, const char *src, void *dst)
 }
 
 /*******************************************
- * DNS interface wrappers. 
+ * DNS 인터페이스 래퍼
  *
- * NOTE: These are obsolete because they are not thread safe. Use
- * getaddrinfo and getnameinfo instead
+ * 참고: 이 함수들은 thread-safe하지 않아 구식입니다.
+ * 대신 getaddrinfo와 getnameinfo를 사용하세요.
  ***********************************/
 
 /* $begin gethostbyname */
@@ -669,7 +669,7 @@ struct hostent *Gethostbyaddr(const char *addr, int len, int type)
 }
 
 /************************************************
- * Wrappers for Pthreads thread control functions
+ * Pthreads thread 제어 함수의 래퍼
  ************************************************/
 
 void Pthread_create(pthread_t *tidp, pthread_attr_t *attrp, 
@@ -717,7 +717,7 @@ void Pthread_once(pthread_once_t *once_control, void (*init_function)()) {
 }
 
 /*******************************
- * Wrappers for Posix semaphores
+ * POSIX semaphore 래퍼
  *******************************/
 
 void Sem_init(sem_t *sem, int pshared, unsigned int value) 
@@ -739,11 +739,16 @@ void V(sem_t *sem)
 }
 
 /****************************************
- * The Rio package - Robust I/O functions
+ * Rio 패키지 - Robust I/O 함수
  ****************************************/
 
-/*
- * rio_readn - Robustly read n bytes (unbuffered)
+/**
+ * @brief 버퍼를 사용하지 않고 최대 n바이트를 견고하게 읽습니다.
+ *
+ * @param fd 읽을 파일 descriptor입니다.
+ * @param usrbuf 읽은 데이터를 저장할 사용자 버퍼입니다.
+ * @param n 읽으려는 최대 바이트 수입니다.
+ * @return 읽은 바이트 수를 반환하고, 오류가 발생하면 -1을 반환합니다.
  */
 /* $begin rio_readn */
 ssize_t rio_readn(int fd, void *usrbuf, size_t n) 
@@ -754,22 +759,27 @@ ssize_t rio_readn(int fd, void *usrbuf, size_t n)
 
     while (nleft > 0) {
 	if ((nread = read(fd, bufp, nleft)) < 0) {
-	    if (errno == EINTR) /* Interrupted by sig handler return */
-		nread = 0;      /* and call read() again */
+	    if (errno == EINTR) /* signal handler 반환으로 중단되었습니다. */
+		nread = 0;      /* read()를 다시 호출합니다. */
 	    else
-		return -1;      /* errno set by read() */ 
+		return -1;      /* errno는 read()가 설정합니다. */
 	} 
 	else if (nread == 0)
 	    break;              /* EOF */
 	nleft -= nread;
 	bufp += nread;
     }
-    return (n - nleft);         /* Return >= 0 */
+    return (n - nleft);         /* 0 이상의 값을 반환합니다. */
 }
 /* $end rio_readn */
 
-/*
- * rio_writen - Robustly write n bytes (unbuffered)
+/**
+ * @brief 버퍼를 사용하지 않고 n바이트를 견고하게 씁니다.
+ *
+ * @param fd 쓸 파일 descriptor입니다.
+ * @param usrbuf 쓸 데이터가 들어 있는 사용자 버퍼입니다.
+ * @param n 쓰려는 바이트 수입니다.
+ * @return 성공 시 n을 반환하고, 오류가 발생하면 -1을 반환합니다.
  */
 /* $begin rio_writen */
 ssize_t rio_writen(int fd, void *usrbuf, size_t n) 
@@ -780,10 +790,10 @@ ssize_t rio_writen(int fd, void *usrbuf, size_t n)
 
     while (nleft > 0) {
 	if ((nwritten = write(fd, bufp, nleft)) <= 0) {
-	    if (errno == EINTR)  /* Interrupted by sig handler return */
-		nwritten = 0;    /* and call write() again */
+	    if (errno == EINTR)  /* signal handler 반환으로 중단되었습니다. */
+		nwritten = 0;    /* write()를 다시 호출합니다. */
 	    else
-		return -1;       /* errno set by write() */
+		return -1;       /* errno는 write()가 설정합니다. */
 	}
 	nleft -= nwritten;
 	bufp += nwritten;
@@ -793,33 +803,32 @@ ssize_t rio_writen(int fd, void *usrbuf, size_t n)
 /* $end rio_writen */
 
 
-/* 
- * rio_read - This is a wrapper for the Unix read() function that
- *    transfers min(n, rio_cnt) bytes from an internal buffer to a user
- *    buffer, where n is the number of bytes requested by the user and
- *    rio_cnt is the number of unread bytes in the internal buffer. On
- *    entry, rio_read() refills the internal buffer via a call to
- *    read() if the internal buffer is empty.
+/*
+ * rio_read - Unix read() 함수의 래퍼입니다. 내부 버퍼에서 사용자 버퍼로
+ *    min(n, rio_cnt) 바이트를 옮깁니다. 여기서 n은 사용자가 요청한
+ *    바이트 수이고 rio_cnt는 내부 버퍼에 남아 있는 읽지 않은 바이트
+ *    수입니다. 진입 시 내부 버퍼가 비어 있으면 read()를 호출해 내부
+ *    버퍼를 다시 채웁니다.
  */
 /* $begin rio_read */
 static ssize_t rio_read(rio_t *rp, char *usrbuf, size_t n)
 {
     int cnt;
 
-    while (rp->rio_cnt <= 0) {  /* Refill if buf is empty */
+    while (rp->rio_cnt <= 0) {  /* 버퍼가 비어 있으면 다시 채웁니다. */
 	rp->rio_cnt = read(rp->rio_fd, rp->rio_buf, 
 			   sizeof(rp->rio_buf));
 	if (rp->rio_cnt < 0) {
-	    if (errno != EINTR) /* Interrupted by sig handler return */
+	    if (errno != EINTR) /* signal handler 반환으로 중단되었습니다. */
 		return -1;
 	}
 	else if (rp->rio_cnt == 0)  /* EOF */
 	    return 0;
 	else 
-	    rp->rio_bufptr = rp->rio_buf; /* Reset buffer ptr */
+	    rp->rio_bufptr = rp->rio_buf; /* 버퍼 포인터를 초기화합니다. */
     }
 
-    /* Copy min(n, rp->rio_cnt) bytes from internal buf to user buf */
+    /* 내부 버퍼에서 사용자 버퍼로 min(n, rp->rio_cnt) 바이트를 복사합니다. */
     cnt = n;          
     if (rp->rio_cnt < n)   
 	cnt = rp->rio_cnt;
@@ -830,8 +839,11 @@ static ssize_t rio_read(rio_t *rp, char *usrbuf, size_t n)
 }
 /* $end rio_read */
 
-/*
- * rio_readinitb - Associate a descriptor with a read buffer and reset buffer
+/**
+ * @brief Rio 읽기 버퍼를 descriptor와 연결하고 초기화합니다.
+ *
+ * @param rp 초기화할 Rio 읽기 버퍼입니다.
+ * @param fd Rio 버퍼와 연결할 파일 descriptor입니다.
  */
 /* $begin rio_readinitb */
 void rio_readinitb(rio_t *rp, int fd) 
@@ -842,8 +854,13 @@ void rio_readinitb(rio_t *rp, int fd)
 }
 /* $end rio_readinitb */
 
-/*
- * rio_readnb - Robustly read n bytes (buffered)
+/**
+ * @brief Rio 내부 버퍼를 사용해 최대 n바이트를 견고하게 읽습니다.
+ *
+ * @param rp 초기화된 Rio 읽기 버퍼입니다.
+ * @param usrbuf 읽은 데이터를 저장할 사용자 버퍼입니다.
+ * @param n 읽으려는 최대 바이트 수입니다.
+ * @return 읽은 바이트 수를 반환하고, 오류가 발생하면 -1을 반환합니다.
  */
 /* $begin rio_readnb */
 ssize_t rio_readnb(rio_t *rp, void *usrbuf, size_t n) 
@@ -854,18 +871,24 @@ ssize_t rio_readnb(rio_t *rp, void *usrbuf, size_t n)
     
     while (nleft > 0) {
 	if ((nread = rio_read(rp, bufp, nleft)) < 0) 
-            return -1;          /* errno set by read() */ 
+            return -1;          /* errno는 read()가 설정합니다. */
 	else if (nread == 0)
 	    break;              /* EOF */
 	nleft -= nread;
 	bufp += nread;
     }
-    return (n - nleft);         /* return >= 0 */
+    return (n - nleft);         /* 0 이상의 값을 반환합니다. */
 }
 /* $end rio_readnb */
 
-/* 
- * rio_readlineb - Robustly read a text line (buffered)
+/**
+ * @brief Rio 내부 버퍼를 사용해 텍스트 한 줄을 견고하게 읽습니다.
+ *
+ * @param rp 초기화된 Rio 읽기 버퍼입니다.
+ * @param usrbuf 읽은 줄을 저장할 사용자 버퍼입니다.
+ * @param maxlen 버퍼에 저장할 수 있는 최대 길이입니다.
+ * @return 읽은 바이트 수를 반환합니다. EOF에서 데이터가 없으면 0,
+ * 오류가 발생하면 -1을 반환합니다.
  */
 /* $begin rio_readlineb */
 ssize_t rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen) 
@@ -882,11 +905,11 @@ ssize_t rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen)
             }
 	} else if (rc == 0) {
 	    if (n == 1)
-		return 0; /* EOF, no data read */
+		return 0; /* EOF, 읽은 데이터가 없습니다. */
 	    else
-		break;    /* EOF, some data was read */
+		break;    /* EOF, 일부 데이터를 읽었습니다. */
 	} else
-	    return -1;	  /* Error */
+	    return -1;	  /* 오류 */
     }
     *bufp = 0;
     return n-1;
@@ -894,7 +917,7 @@ ssize_t rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen)
 /* $end rio_readlineb */
 
 /**********************************
- * Wrappers for robust I/O routines
+ * Robust I/O 루틴의 래퍼
  **********************************/
 ssize_t Rio_readn(int fd, void *ptr, size_t nbytes) 
 {
@@ -934,64 +957,66 @@ ssize_t Rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen)
     return rc;
 } 
 
-/******************************** 
- * Client/server helper functions
+/********************************
+ * Client/server 헬퍼 함수
  ********************************/
-/*
- * open_clientfd - Open connection to server at <hostname, port> and
- *     return a socket descriptor ready for reading and writing. This
- *     function is reentrant and protocol-independent.
+/**
+ * @brief <hostname, port>의 서버에 연결합니다.
  *
- *     On error, returns: 
- *       -2 for getaddrinfo error
- *       -1 with errno set for other errors.
+ * @param hostname 연결할 서버의 hostname입니다.
+ * @param port 연결할 서버의 port입니다.
+ * @return 성공 시 읽기/쓰기 가능한 socket descriptor를 반환합니다.
+ * getaddrinfo 오류는 -2, 그 외 오류는 errno를 설정한 뒤 -1을 반환합니다.
+ *
+ * 이 함수는 재진입 가능하고 protocol-independent입니다.
  */
 /* $begin open_clientfd */
 int open_clientfd(char *hostname, char *port) {
     int clientfd, rc;
     struct addrinfo hints, *listp, *p;
 
-    /* Get a list of potential server addresses */
+    /* 가능한 서버 주소 목록을 가져옵니다. */
     memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_socktype = SOCK_STREAM;  /* Open a connection */
-    hints.ai_flags = AI_NUMERICSERV;  /* ... using a numeric port arg. */
-    hints.ai_flags |= AI_ADDRCONFIG;  /* Recommended for connections */
+    hints.ai_socktype = SOCK_STREAM;  /* 연결을 엽니다. */
+    hints.ai_flags = AI_NUMERICSERV;  /* 숫자 port 인자를 사용합니다. */
+    hints.ai_flags |= AI_ADDRCONFIG;  /* 연결에 권장됩니다. */
     if ((rc = getaddrinfo(hostname, port, &hints, &listp)) != 0) {
         fprintf(stderr, "getaddrinfo failed (%s:%s): %s\n", hostname, port, gai_strerror(rc));
         return -2;
     }
   
-    /* Walk the list for one that we can successfully connect to */
+    /* 성공적으로 연결할 수 있는 주소를 찾을 때까지 목록을 순회합니다. */
     for (p = listp; p; p = p->ai_next) {
-        /* Create a socket descriptor */
+        /* socket descriptor를 생성합니다. */
         if ((clientfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) 
-            continue; /* Socket failed, try the next */
+            continue; /* Socket 생성 실패, 다음 주소를 시도합니다. */
 
-        /* Connect to the server */
+        /* 서버에 연결합니다. */
         if (connect(clientfd, p->ai_addr, p->ai_addrlen) != -1) 
-            break; /* Success */
-        if (close(clientfd) < 0) { /* Connect failed, try another */  //line:netp:openclientfd:closefd
+            break; /* 성공 */
+        if (close(clientfd) < 0) { /* 연결 실패, 다른 주소를 시도합니다. */  //line:netp:openclientfd:closefd
             fprintf(stderr, "open_clientfd: close failed: %s\n", strerror(errno));
             return -1;
         } 
     } 
 
-    /* Clean up */
+    /* 정리합니다. */
     freeaddrinfo(listp);
-    if (!p) /* All connects failed */
+    if (!p) /* 모든 연결이 실패했습니다. */
         return -1;
-    else    /* The last connect succeeded */
+    else    /* 마지막 연결이 성공했습니다. */
         return clientfd;
 }
 /* $end open_clientfd */
 
-/*  
- * open_listenfd - Open and return a listening socket on port. This
- *     function is reentrant and protocol-independent.
+/**
+ * @brief port에서 listening socket을 열고 반환합니다.
  *
- *     On error, returns: 
- *       -2 for getaddrinfo error
- *       -1 with errno set for other errors.
+ * @param port 연결 요청을 받을 port입니다.
+ * @return 성공 시 listening socket descriptor를 반환합니다.
+ * getaddrinfo 오류는 -2, 그 외 오류는 errno를 설정한 뒤 -1을 반환합니다.
+ *
+ * 이 함수는 재진입 가능하고 protocol-independent입니다.
  */
 /* $begin open_listenfd */
 int open_listenfd(char *port) 
@@ -999,42 +1024,42 @@ int open_listenfd(char *port)
     struct addrinfo hints, *listp, *p;
     int listenfd, rc, optval=1;
 
-    /* Get a list of potential server addresses */
+    /* 가능한 서버 주소 목록을 가져옵니다. */
     memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_socktype = SOCK_STREAM;             /* Accept connections */
-    hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG; /* ... on any IP address */
-    hints.ai_flags |= AI_NUMERICSERV;            /* ... using port number */
+    hints.ai_socktype = SOCK_STREAM;             /* 연결을 받습니다. */
+    hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG; /* 모든 IP 주소에서 받습니다. */
+    hints.ai_flags |= AI_NUMERICSERV;            /* port 번호를 사용합니다. */
     if ((rc = getaddrinfo(NULL, port, &hints, &listp)) != 0) {
         fprintf(stderr, "getaddrinfo failed (port %s): %s\n", port, gai_strerror(rc));
         return -2;
     }
 
-    /* Walk the list for one that we can bind to */
+    /* bind할 수 있는 주소를 찾을 때까지 목록을 순회합니다. */
     for (p = listp; p; p = p->ai_next) {
-        /* Create a socket descriptor */
+        /* socket descriptor를 생성합니다. */
         if ((listenfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) 
-            continue;  /* Socket failed, try the next */
+            continue;  /* Socket 생성 실패, 다음 주소를 시도합니다. */
 
-        /* Eliminates "Address already in use" error from bind */
+        /* bind의 "Address already in use" 오류를 줄입니다. */
         setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,    //line:netp:csapp:setsockopt
                    (const void *)&optval , sizeof(int));
 
-        /* Bind the descriptor to the address */
+        /* descriptor를 주소에 bind합니다. */
         if (bind(listenfd, p->ai_addr, p->ai_addrlen) == 0)
-            break; /* Success */
-        if (close(listenfd) < 0) { /* Bind failed, try the next */
+            break; /* 성공 */
+        if (close(listenfd) < 0) { /* Bind 실패, 다음 주소를 시도합니다. */
             fprintf(stderr, "open_listenfd close failed: %s\n", strerror(errno));
             return -1;
         }
     }
 
 
-    /* Clean up */
+    /* 정리합니다. */
     freeaddrinfo(listp);
-    if (!p) /* No address worked */
+    if (!p) /* 동작한 주소가 없습니다. */
         return -1;
 
-    /* Make it a listening socket ready to accept connection requests */
+    /* 연결 요청을 받을 준비가 된 listening socket으로 만듭니다. */
     if (listen(listenfd, LISTENQ) < 0) {
         close(listenfd);
 	return -1;
@@ -1044,7 +1069,7 @@ int open_listenfd(char *port)
 /* $end open_listenfd */
 
 /****************************************************
- * Wrappers for reentrant protocol-independent helpers
+ * 재진입 가능한 protocol-independent 헬퍼의 래퍼
  ****************************************************/
 int Open_clientfd(char *hostname, char *port) 
 {
@@ -1065,7 +1090,5 @@ int Open_listenfd(char *port)
 }
 
 /* $end csapp.c */
-
-
 
 
