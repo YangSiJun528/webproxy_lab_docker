@@ -97,7 +97,9 @@ void doit(int fd) {
         return;
     }
 
-    
+    //TODO: libyuarel 사용해서 첫 줄 읽어서 정상적인 프록시 요청인지 파악하기.
+
+
 
     //TODO: 헤더 읽기
 }
