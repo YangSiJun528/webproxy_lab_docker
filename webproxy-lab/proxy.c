@@ -60,11 +60,13 @@ void doit(int fd) {
     Rio_readinitb(&rio, fd);
 
     // HTTP 요청의 끝("\r\n")일 때까지 출력
+    printf(">>> REQ START==================================\n");
     while (Rio_readlineb(&rio, buf, MAXLINE) > 0) {
         printf("%s", buf);
         if (strcmp(buf, "\r\n") == 0) {
             break;
         }
     }
+    printf(">>> REQ END==================================\n");
     fflush(stdout);
 }
