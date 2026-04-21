@@ -18,6 +18,7 @@ void create_proxy_requesthdrs(rio_t *rp, const struct yuarel *url, char *out_pro
 static bool is_header_name(const char *line, const char *name);
 static void append_header(char *headers, const char *line);
 static void create_default_host_header(const struct yuarel *url, char *host_line);
+static void create_request_line(const struct yuarel *url, char *request_line);
 
 /**
  * @brief 지정한 포트에서 프록시 웹 서버를 시작하고 연결을 반복 처리.
@@ -105,7 +106,7 @@ void doit(int fd) {
     struct yuarel url = {0};
 
     bool is_succes_url_parse = yuarel_parse(&url, raw_uri) != -1;
-    if (is_succes_url_parse == false)
+    if (is_succes_url_parse == false || url.host == NULL)
     {
         clienterror(fd, method, "400", "Bad Request",
                     "TODO - proxy 요청 아님");
@@ -123,22 +124,26 @@ void doit(int fd) {
     char proxy_hdrs[MAXBUF];
     create_proxy_requesthdrs(&rio, &url, proxy_hdrs);
 
-    //TODO: 소켓 열여서 요청 포트 연결하고(없으면 80) 데이터 그대로 보내기
-    //      body는 따로 변경하는거 없으니까 그대로 붙이면 됨 - 복사 생기는건 쩔수 - 아직 최적화 전이니까
-
-
     //TODO: 이거 이름 target_ 말고 다른거 없나
     int target_port_int = url.port == 0 ? 80 : url.port;
     int clientfd;
-    char target_buf[MAXLINE];
+    char target_buf[MAXBUF];
     rio_t target_rio;
 
     char origin_port[MAXLINE];
     sprintf(origin_port, "%d", target_port_int);
     clientfd = Open_clientfd(url.host, origin_port);
-    Rio_readinitb(&target_rio, clientfd);
 
-    Rio_writen(clientfd, target_buf, strlen(buf));
+    char request_line[MAXLINE];
+    create_request_line(&url, request_line);
+    Rio_writen(clientfd, request_line, strlen(request_line));
+    Rio_writen(clientfd, proxy_hdrs, strlen(proxy_hdrs));
+
+    Rio_readinitb(&target_rio, clientfd);
+    ssize_t n;
+    while ((n = Rio_readnb(&target_rio, target_buf, MAXBUF)) > 0) {
+        Rio_writen(fd, target_buf, n);
+    }
 
     Close(clientfd);
 }
@@ -239,5 +244,15 @@ static void create_default_host_header(const struct yuarel *url, char *host_line
         snprintf(host_line, MAXLINE, "Host: %s:%d\r\n", url->host, url->port);
     } else {
         snprintf(host_line, MAXLINE, "Host: %s\r\n", url->host);
+    }
+}
+
+static void create_request_line(const struct yuarel *url, char *request_line) {
+    const char *path = url->path == NULL ? "" : url->path;
+
+    if (url->query != NULL) {
+        snprintf(request_line, MAXLINE, "GET /%s?%s HTTP/1.0\r\n", path, url->query);
+    } else {
+        snprintf(request_line, MAXLINE, "GET /%s HTTP/1.0\r\n", path);
     }
 }
