@@ -6,6 +6,7 @@ devcontainer 내부 터미널에서, 저장소 루트에서 실행:
 
 ```sh
 cd webproxy-lab/tiny
+make clean
 make
 ./tiny 8000
 ```
