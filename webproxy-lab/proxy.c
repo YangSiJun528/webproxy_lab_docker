@@ -48,6 +48,19 @@ int main(int argc, char **argv) {
     return 0;
 }
 
+void print_full_html(rio_t rio, char buf[8192]) {
+    // HTTP 요청의 끝("\r\n")일 때까지 출력
+    printf(">>> REQ START==================================\n");
+    while (Rio_readlineb(&rio, buf, MAXLINE) > 0) {
+        printf("%s", buf);
+        if (strcmp(buf, "\r\n") == 0) {
+            break;
+        }
+    }
+    printf(">>> REQ END==================================\n");
+    fflush(stdout);
+}
+
 /**
  * @brief 클라이언트로부터 들어온 요청을 HTTP 헤더 끝(\r\n)까지 읽어 stdout에 출력.
  *
@@ -59,14 +72,5 @@ void doit(int fd) {
 
     Rio_readinitb(&rio, fd);
 
-    // HTTP 요청의 끝("\r\n")일 때까지 출력
-    printf(">>> REQ START==================================\n");
-    while (Rio_readlineb(&rio, buf, MAXLINE) > 0) {
-        printf("%s", buf);
-        if (strcmp(buf, "\r\n") == 0) {
-            break;
-        }
-    }
-    printf(">>> REQ END==================================\n");
-    fflush(stdout);
+    //print_full_html(rio, buf);
 }
