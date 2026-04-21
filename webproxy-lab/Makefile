@@ -23,11 +23,14 @@ all: proxy
 csapp.o: csapp.c csapp.h
 	$(CC) $(CFLAGS) -c csapp.c
 
-proxy.o: proxy.c csapp.h
+yuarel.o: yuarel.c yuarel.h
+	$(CC) $(CFLAGS) -c yuarel.c
+
+proxy.o: proxy.c csapp.h yuarel.h
 	$(CC) $(CFLAGS) -c proxy.c
 
-proxy: proxy.o csapp.o
-	$(CC) $(CFLAGS) proxy.o csapp.o -o proxy $(LDFLAGS)
+proxy: proxy.o csapp.o yuarel.o
+	$(CC) $(CFLAGS) proxy.o csapp.o yuarel.o -o proxy $(LDFLAGS)
 
 driver-run: proxy
 	$(MAKE) -C tiny clean
