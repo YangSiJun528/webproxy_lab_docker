@@ -65,7 +65,9 @@ curl -i "http://127.0.0.1:8000/cgi-bin/adder?n1=1&n2=2"
     ...
     ```
 - 11.7 MPG 파일 제공: Tiny가 MPG 동영상 파일을 정적 콘텐츠로 제공하도록 MIME type 처리를 추가한다.
-  - 
+  - `.mpeg`, `.mpg` 파일은 `video/mpeg`를 쓰면 됨.
+    - 참고: https://developer.mozilla.org/ko/docs/Web/HTTP/Guides/MIME_types/Common_types#:~:text=MPEG%20%EB%B9%84%EB%94%94%EC%98%A4-,video/mpeg,-.mpkg
+  - 근데 mpeg는 최신 브라우저가 해석을 못해서 `.mp4`로 바꾸니까 해결됨.
 
 - 11.9 정적 파일 전송 방식 변경: `mmap` 대신 `malloc`, `Rio_readn`, `Rio_writen`으로 파일을 읽어 전송한다.
   메모:
