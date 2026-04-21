@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include "csapp.h"
 
@@ -11,6 +12,7 @@ static const char *user_agent_hdr =
     "Firefox/10.0.3\r\n";
 
 void doit(int fd);
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
 /**
  * @brief 지정한 포트에서 프록시 웹 서버를 시작하고 연결을 반복 처리.
@@ -71,6 +73,63 @@ void doit(int fd) {
     char buf[MAXLINE];
 
     Rio_readinitb(&rio, fd);
+    if (Rio_readlineb(&rio, buf, MAXLINE) <= 0) {
+        // \n 까지 읽기 (시작 줄 읽기)
+        return;
+    }
 
-    //print_full_html(rio, buf);
+    char method[MAXLINE];
+    char uri[MAXLINE];
+    char version[MAXLINE];
+
+    // 시작 줄 분석
+    if (sscanf(buf, "%s %s %s", method, uri, version) != 3) {
+        clienterror(fd, buf, "400", "Bad Request",
+                    "Tiny could not parse the request line");
+        return;
+    }
+
+    // 현재는 GET 만 지원함
+    bool is_get_method = (strcasecmp(method, "GET") == 0);
+    if (is_get_method == false) {
+        clienterror(fd, method, "501", "Not implemented",
+                    "Tiny does not implement this method");
+        return;
+    }
+
+    
+
+    //TODO: 헤더 읽기
+}
+
+/**
+ * @brief HTTP 오류 응답 본문과 헤더를 만들어 클라이언트에 전송합니다.
+ *
+ * @param fd 클라이언트 연결 socket descriptor입니다.
+ * @param cause 오류의 원인이 된 대상입니다.
+ * @param errnum HTTP 상태 코드 문자열입니다.
+ * @param shortmsg 짧은 오류 메시지입니다.
+ * @param longmsg 자세한 오류 메시지입니다.
+ */
+void clienterror(int fd, char *cause, char *errnum,
+                 char *shortmsg, char *longmsg) {
+    char body[MAXBUF];
+
+    sprintf(body, "<html><title>Tiny Error</title>");
+    sprintf(body, "%s<body bgcolor=\"ffffff\">\r\n", body);
+    sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
+    sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
+    sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
+
+    char buf[MAXLINE];
+
+    sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
+    Rio_writen(fd, buf, strlen(buf));
+
+    sprintf(buf, "Content-type: text/html\r\n");
+    Rio_writen(fd, buf, strlen(buf));
+
+    sprintf(buf, "Content-length: %d\r\n\r\n", (int) strlen(body));
+    Rio_writen(fd, buf, strlen(buf));
+    Rio_writen(fd, body, strlen(body));
 }
