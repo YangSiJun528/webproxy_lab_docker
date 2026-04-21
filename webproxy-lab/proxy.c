@@ -14,6 +14,7 @@ static const char *user_agent_hdr =
 
 void doit(int fd);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+void create_proxy_requesthdrs(rio_t *rp);
 
 /**
  * @brief 지정한 포트에서 프록시 웹 서버를 시작하고 연결을 반복 처리.
@@ -150,4 +151,43 @@ void clienterror(int fd, char *cause, char *errnum,
     sprintf(buf, "Content-length: %d\r\n\r\n", (int) strlen(body));
     Rio_writen(fd, buf, strlen(buf));
     Rio_writen(fd, body, strlen(body));
+}
+
+/**
+ * @brief 요청 헤더를 읽고 새로운 프록시 헤더를 반환합니다.
+ *
+ * @param rp 클라이언트 연결에 초기화된 Rio 읽기 버퍼입니다.
+ * TODO: 귀찮 - out_proxy_hdrs - 헤더 그냥 대충 사이즈 벗어나는거 외부에서 보장한다 치기
+ */
+void create_proxy_requesthdrs(rio_t *rp, char* out_proxy_hdrs) {
+    char buf[MAXLINE];
+    *out_proxy_hdrs = "";
+
+    while (1) {
+        Rio_readlineb(rp, buf, MAXLINE);
+
+        bool is_header_end = (strcmp(buf, "\r\n") == 0);
+        if (is_header_end == true) {
+            return;
+        }
+
+        char hdr_key[MAXLINE];
+        char hdr_value[MAXLINE];
+        sscanf(buf, "%s: %s", hdr_key, hdr_value);
+
+        if (strcmp("대충써야하는프록시헤더"), hdr_key) {
+            //TODO: 있으면 로그 찍고 덮어쓰기 - 근데 실패해야할수도 있어서 나중에 바꾸기 쉽게 로깅하는거
+            continue;
+        } else {
+            //TODO: 없으면 추가
+            continue;
+        }
+
+        //TODO: 저런 검증 많이하기
+
+        // 그 외에는 그냥 바로 추가
+
+        strcat(out_proxy_hdrs, buf);
+    }
+    strcat(out_proxy_hdrs, "\r\n"); // 마지막줄까지 복사
 }
