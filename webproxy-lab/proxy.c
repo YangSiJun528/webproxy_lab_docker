@@ -14,7 +14,10 @@ static const char *user_agent_hdr =
 
 void doit(int fd);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
-void create_proxy_requesthdrs(rio_t *rp);
+void create_proxy_requesthdrs(rio_t *rp, const struct yuarel *url, char *out_proxy_hdrs);
+static bool is_header_name(const char *line, const char *name);
+static void append_header(char *headers, const char *line);
+static void create_default_host_header(const struct yuarel *url, char *host_line);
 
 /**
  * @brief 지정한 포트에서 프록시 웹 서버를 시작하고 연결을 반복 처리.
@@ -117,8 +120,11 @@ void doit(int fd) {
     // printf("\tquery:\t\t%s\n", url.query);
     // printf("\tfragment:\t%s\n", url.fragment);
 
+    char proxy_hdrs[MAXBUF];
+    create_proxy_requesthdrs(&rio, &url, proxy_hdrs);
 
-    //TODO: 헤더 읽기
+    //TODO: 소켓 열여서 요청 포트 연결하고(없으면 80) 데이터 그대로 보내기
+    //      body는 따로 변경하는거 없으니까 그대로 붙이면 됨 - 복사 생기는건 쩔수 - 아직 최적화 전이니까
 }
 
 /**
@@ -154,40 +160,68 @@ void clienterror(int fd, char *cause, char *errnum,
 }
 
 /**
- * @brief 요청 헤더를 읽고 새로운 프록시 헤더를 반환합니다.
+ * @brief 클라이언트 요청 헤더를 읽고 원본 서버로 보낼 프록시 요청 헤더를 만듭니다.
  *
  * @param rp 클라이언트 연결에 초기화된 Rio 읽기 버퍼입니다.
- * TODO: 귀찮 - out_proxy_hdrs - 헤더 그냥 대충 사이즈 벗어나는거 외부에서 보장한다 치기
+ * @param url request line에서 파싱한 URL 정보입니다.
+ * @param out_proxy_hdrs 생성된 헤더 문자열을 저장할 출력 버퍼입니다.
  */
-void create_proxy_requesthdrs(rio_t *rp, char* out_proxy_hdrs) {
+void create_proxy_requesthdrs(rio_t *rp, const struct yuarel *url, char *out_proxy_hdrs) {
     char buf[MAXLINE];
-    *out_proxy_hdrs = "";
+    char host_line[MAXLINE];
 
-    while (1) {
-        Rio_readlineb(rp, buf, MAXLINE);
+    out_proxy_hdrs[0] = '\0';
+    create_default_host_header(url, host_line);
 
-        bool is_header_end = (strcmp(buf, "\r\n") == 0);
-        if (is_header_end == true) {
-            return;
+    while (Rio_readlineb(rp, buf, MAXLINE) > 0) {
+        if (strcmp(buf, "\r\n") == 0) {
+            break;
         }
 
-        char hdr_key[MAXLINE];
-        char hdr_value[MAXLINE];
-        sscanf(buf, "%s: %s", hdr_key, hdr_value);
-
-        if (strcmp("대충써야하는프록시헤더"), hdr_key) {
-            //TODO: 있으면 로그 찍고 덮어쓰기 - 근데 실패해야할수도 있어서 나중에 바꾸기 쉽게 로깅하는거
-            continue;
-        } else {
-            //TODO: 없으면 추가
+        if (is_header_name(buf, "Host")) {
+            strcpy(host_line, buf);
             continue;
         }
 
-        //TODO: 저런 검증 많이하기
+        //이미 있는 경우 스킵
+        if (is_header_name(buf, "User-Agent") ||
+            is_header_name(buf, "Connection") ||
+            is_header_name(buf, "Proxy-Connection")) {
+            continue;
+        }
 
-        // 그 외에는 그냥 바로 추가
-
-        strcat(out_proxy_hdrs, buf);
+        append_header(out_proxy_hdrs, buf);
     }
-    strcat(out_proxy_hdrs, "\r\n"); // 마지막줄까지 복사
+
+    // 마지막에 필수 헤더 추가 후 헤더 종료
+    append_header(out_proxy_hdrs, host_line);
+    append_header(out_proxy_hdrs, user_agent_hdr);
+    append_header(out_proxy_hdrs, "Connection: close\r\n");
+    append_header(out_proxy_hdrs, "Proxy-Connection: close\r\n");
+    append_header(out_proxy_hdrs, "\r\n");
+}
+
+static bool is_header_name(const char *line, const char *name) {
+    size_t name_len = strlen(name);
+
+    return strncasecmp(line, name, name_len) == 0 && line[name_len] == ':';
+}
+
+static void append_header(char *headers, const char *line) {
+    if (strlen(headers) + strlen(line) < MAXBUF) {
+        strcat(headers, line);
+    }
+}
+
+static void create_default_host_header(const struct yuarel *url, char *host_line) {
+    if (url->host == NULL) {
+        strcpy(host_line, "Host: \r\n");
+        return;
+    }
+
+    if (url->port > 0 && url->port != 80) {
+        snprintf(host_line, MAXLINE, "Host: %s:%d\r\n", url->host, url->port);
+    } else {
+        snprintf(host_line, MAXLINE, "Host: %s\r\n", url->host);
+    }
 }
