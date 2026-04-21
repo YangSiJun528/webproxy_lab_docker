@@ -125,6 +125,22 @@ void doit(int fd) {
 
     //TODO: 소켓 열여서 요청 포트 연결하고(없으면 80) 데이터 그대로 보내기
     //      body는 따로 변경하는거 없으니까 그대로 붙이면 됨 - 복사 생기는건 쩔수 - 아직 최적화 전이니까
+
+
+    //TODO: 이거 이름 target_ 말고 다른거 없나
+    int target_port_int = url.port == 0 ? 80 : url.port;
+    int clientfd;
+    char target_buf[MAXLINE];
+    rio_t target_rio;
+
+    char origin_port[MAXLINE];
+    sprintf(origin_port, "%d", target_port_int);
+    clientfd = Open_clientfd(url.host, origin_port);
+    Rio_readinitb(&target_rio, clientfd);
+
+    Rio_writen(clientfd, target_buf, strlen(buf));
+
+    Close(clientfd);
 }
 
 /**
