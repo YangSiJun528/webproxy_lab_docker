@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "csapp.h"
 
 /* 권장 최대 캐시 크기와 객체 크기 */
 #define MAX_CACHE_SIZE 1049000
@@ -9,13 +10,61 @@ static const char *user_agent_hdr =
     "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 "
     "Firefox/10.0.3\r\n";
 
+void doit(int fd);
+
 /**
- * @brief 프록시 과제에서 권장하는 User-Agent 헤더를 표준 출력에 출력합니다.
+ * @brief 지정한 포트에서 프록시 웹 서버를 시작하고 연결을 반복 처리.
  *
- * @return 정상 종료 시 0을 반환합니다.
+ * @param argc 명령행 인자의 개수, 항상 2개여야 함
+ * @param argv 포트 번호를 받는다
+ * @return 프로그램 종료됨
  */
-int main()
-{
-  printf("%s", user_agent_hdr);
-  return 0;
+int main(int argc, char **argv) {
+    const char *program_name = argv[0];
+    const char *listen_port = argv[1];
+    if (argc != 2) {
+        fprintf(stderr, "usage: %s <port>\n", program_name);
+        exit(1);
+    }
+
+    int listenfd = Open_listenfd((char *) listen_port);
+
+    while (1) {
+        struct sockaddr_storage clientaddr;
+        socklen_t clientlen = sizeof(clientaddr);
+        int connfd = Accept(listenfd, (SA *) &clientaddr, &clientlen);
+
+        char hostname[MAXLINE];
+        char port[MAXLINE];
+
+        // 연결된 상대 소캣의 정보를 가져옴
+        Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE,
+                    port, MAXLINE, 0);
+        printf("Accepted connection from (%s, %s)\n", hostname, port);
+
+        doit(connfd);
+        Close(connfd);
+    }
+    return 0;
+}
+
+/**
+ * @brief 클라이언트로부터 들어온 요청을 HTTP 헤더 끝(\r\n)까지 읽어 stdout에 출력.
+ *
+ * @param fd 클라이언트 커넥션 socket descriptor
+ */
+void doit(int fd) {
+    rio_t rio;
+    char buf[MAXLINE];
+
+    Rio_readinitb(&rio, fd);
+
+    // HTTP 요청의 끝("\r\n")일 때까지 출력
+    while (Rio_readlineb(&rio, buf, MAXLINE) > 0) {
+        printf("%s", buf);
+        if (strcmp(buf, "\r\n") == 0) {
+            break;
+        }
+    }
+    fflush(stdout);
 }
