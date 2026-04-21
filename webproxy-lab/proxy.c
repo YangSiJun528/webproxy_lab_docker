@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdio.h>
+#include "yuarel.h"
 #include "csapp.h"
 
 /* 권장 최대 캐시 크기와 객체 크기 */
@@ -79,11 +80,11 @@ void doit(int fd) {
     }
 
     char method[MAXLINE];
-    char uri[MAXLINE];
+    char raw_uri[MAXLINE];
     char version[MAXLINE];
 
     // 시작 줄 분석
-    if (sscanf(buf, "%s %s %s", method, uri, version) != 3) {
+    if (sscanf(buf, "%s %s %s", method, raw_uri, version) != 3) {
         clienterror(fd, buf, "400", "Bad Request",
                     "Tiny could not parse the request line");
         return;
@@ -97,8 +98,23 @@ void doit(int fd) {
         return;
     }
 
-    //TODO: libyuarel 사용해서 첫 줄 읽어서 정상적인 프록시 요청인지 파악하기.
+    struct yuarel url = {0};
 
+    bool is_succes_url_parse = yuarel_parse(&url, raw_uri) != -1;
+    if (is_succes_url_parse == false)
+    {
+        clienterror(fd, method, "400", "Bad Request",
+                    "TODO - proxy 요청 아님");
+        return;
+    }
+
+    // printf("Struct values:\n");
+    // printf("\tscheme:\t\t%s\n", url.scheme);
+    // printf("\thost:\t\t%s\n", url.host);
+    // printf("\tport:\t\t%d\n", url.port);
+    // printf("\tpath:\t\t%s\n", url.path);
+    // printf("\tquery:\t\t%s\n", url.query);
+    // printf("\tfragment:\t%s\n", url.fragment);
 
 
     //TODO: 헤더 읽기
