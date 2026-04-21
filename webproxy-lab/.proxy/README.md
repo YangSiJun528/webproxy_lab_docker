@@ -89,3 +89,11 @@ Host: 127.0.0.1:8000
 Connection: close
 Proxy-Connection: close
 ```
+
+## Driver 테스트
+
+전체 테스트를 반복해서 실행할 때:
+
+```sh
+(cd webproxy-lab && make clean && make && make -C tiny clean && make -C tiny && ./driver.sh)
+```
