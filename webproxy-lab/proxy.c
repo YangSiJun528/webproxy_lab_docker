@@ -6,6 +6,18 @@
 /* 권장 최대 캐시 크기와 객체 크기 */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
+#define CACHE_ENTRY_COUNT (MAX_CACHE_SIZE / MAX_OBJECT_SIZE)
+
+typedef struct {
+    bool valid;
+    char uri[MAXLINE];
+    char object[MAX_OBJECT_SIZE];
+    size_t size;
+} cache_entry_t;
+
+static cache_entry_t cache[CACHE_ENTRY_COUNT];
+static int next_cache_slot = 0;
+static pthread_rwlock_t cache_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 /* 이 긴 줄을 코드에 포함해도 style 점수는 깎이지 않습니다. */
 static const char *user_agent_hdr =
@@ -20,6 +32,10 @@ static bool is_header_name(const char *line, const char *name);
 static void append_header(char *headers, const char *line);
 static void create_default_host_header(const struct yuarel *url, char *host_line);
 static void create_request_line(const struct yuarel *url, char *request_line);
+static bool cache_serve(const char *uri, int fd);
+static void cache_insert(const char *uri, const char *object, size_t size);
+static int cache_find(const char *uri);
+static int cache_pick_store_slot(void);
 
 /**
  * @brief 지정한 포트에서 프록시 웹 서버를 시작하고 연결을 반복 처리.
@@ -107,6 +123,8 @@ void doit(int fd) {
                     "Tiny could not parse the request line");
         return;
     }
+    char cache_key[MAXLINE];
+    strcpy(cache_key, raw_uri);
 
     // 현재는 GET 만 지원함
     bool is_get_method = (strcasecmp(method, "GET") == 0);
@@ -137,6 +155,10 @@ void doit(int fd) {
     char proxy_hdrs[MAXBUF];
     create_proxy_requesthdrs(&rio, &url, proxy_hdrs);
 
+    if (cache_serve(cache_key, fd)) {
+        return;
+    }
+
     //TODO: 이거 이름 target_ 말고 다른거 없나
     int target_port_int = url.port == 0 ? 80 : url.port;
     int clientfd;
@@ -154,11 +176,26 @@ void doit(int fd) {
 
     Rio_readinitb(&target_rio, clientfd);
     ssize_t n;
+    char object_buf[MAX_OBJECT_SIZE];
+    size_t object_size = 0;
+    bool can_cache = true;
+
     while ((n = Rio_readnb(&target_rio, target_buf, MAXBUF)) > 0) {
         Rio_writen(fd, target_buf, n);
+
+        if (can_cache && object_size + n <= MAX_OBJECT_SIZE) {
+            memcpy(object_buf + object_size, target_buf, n);
+            object_size += n;
+        } else {
+            can_cache = false;
+        }
     }
 
     Close(clientfd);
+
+    if (can_cache) {
+        cache_insert(cache_key, object_buf, object_size);
+    }
 }
 
 /**
@@ -268,4 +305,83 @@ static void create_request_line(const struct yuarel *url, char *request_line) {
     } else {
         snprintf(request_line, MAXLINE, "GET /%s HTTP/1.0\r\n", path);
     }
+}
+
+/**
+ * @brief 캐시에 uri가 있으면 cached response를 클라이언트에 바로 전송합니다.
+ *
+ * @param uri 캐시 조회에 사용할 원본 요청 URI입니다.
+ * @param fd cached response를 보낼 클라이언트 socket descriptor입니다.
+ * @return cache hit이면 true, cache miss이면 false를 반환합니다.
+ */
+static bool cache_serve(const char *uri, int fd) {
+    // 읽기 락: 여러 스레드가 동시에 캐시를 읽는 것은 허용한다.
+    pthread_rwlock_rdlock(&cache_lock);
+
+    int index = cache_find(uri);
+    if (index >= 0) {
+        Rio_writen(fd, cache[index].object, cache[index].size);
+    }
+
+    // 읽기 락 해제
+    pthread_rwlock_unlock(&cache_lock);
+    return index >= 0;
+}
+
+/**
+ * @brief response object를 캐시에 저장합니다.
+ *
+ * @param uri 캐시 key로 사용할 원본 요청 URI입니다.
+ * @param object 저장할 response bytes입니다.
+ * @param size 저장할 response 크기입니다.
+ */
+static void cache_insert(const char *uri, const char *object, size_t size) {
+    if (size > MAX_OBJECT_SIZE) {
+        return;
+    }
+
+    // 쓰기 락: 캐시 슬롯을 덮어쓰는 동안 다른 reader/writer를 막는다.
+    pthread_rwlock_wrlock(&cache_lock);
+
+    int index = cache_find(uri);
+    if (index < 0) {
+        index = cache_pick_store_slot();
+    }
+
+    cache[index].valid = true;
+    strncpy(cache[index].uri, uri, MAXLINE - 1);
+    cache[index].uri[MAXLINE - 1] = '\0';
+    memcpy(cache[index].object, object, size);
+    cache[index].size = size;
+
+    // 쓰기 락 해제
+    pthread_rwlock_unlock(&cache_lock);
+}
+
+/**
+ * @brief uri에 해당하는 캐시 슬롯을 찾습니다.
+ *
+ * @param uri 찾을 캐시 key입니다.
+ * @return 찾으면 슬롯 index, 없으면 -1을 반환합니다.
+ */
+static int cache_find(const char *uri) {
+    for (int i = 0; i < CACHE_ENTRY_COUNT; i++) {
+        if (cache[i].valid && strcmp(cache[i].uri, uri) == 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+/**
+ * @brief 새 object를 저장할 캐시 슬롯을 FIFO 방식으로 고릅니다.
+ *
+ * @return 저장에 사용할 슬롯 index를 반환합니다.
+ */
+static int cache_pick_store_slot(void) {
+    // 현재는 FIFO 방식. 나중에 LRU에 가깝게 바꾸려면 이 함수만 교체하면 된다.
+    int index = next_cache_slot;
+    next_cache_slot = (next_cache_slot + 1) % CACHE_ENTRY_COUNT;
+    return index;
 }
