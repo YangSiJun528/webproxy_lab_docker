@@ -167,7 +167,7 @@ void doit(int clientfd) {
     create_proxy_requesthdrs(&client_rio, &origin_url, proxy_hdrs);
 
     // 캐싱된 경로면 그대로 반환
-    // 실제면 멱등성이나 TTL 등 고려해야겠지만 지ㅇ
+    // 실제면 멱등성이나 TTL 등 고려해야겠지만 지금은 무시
     if (serve_from_cache(cache_key, clientfd)) {
         return;
     }
