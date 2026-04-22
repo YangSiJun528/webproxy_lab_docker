@@ -13,6 +13,7 @@ static const char *user_agent_hdr =
     "Firefox/10.0.3\r\n";
 
 void doit(int fd);
+void *handle_client_thread(void *vargp);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 void create_proxy_requesthdrs(rio_t *rp, const struct yuarel *url, char *out_proxy_hdrs);
 static bool is_header_name(const char *line, const char *name);
@@ -40,7 +41,8 @@ int main(int argc, char **argv) {
     while (1) {
         struct sockaddr_storage clientaddr;
         socklen_t clientlen = sizeof(clientaddr);
-        int connfd = Accept(listenfd, (SA *) &clientaddr, &clientlen);
+        int *connfdp = Malloc(sizeof(int));
+        *connfdp = Accept(listenfd, (SA *) &clientaddr, &clientlen);
 
         char hostname[MAXLINE];
         char port[MAXLINE];
@@ -50,10 +52,21 @@ int main(int argc, char **argv) {
                     port, MAXLINE, 0);
         printf("Accepted connection from (%s, %s)\n", hostname, port);
 
-        doit(connfd);
-        Close(connfd);
+        pthread_t tid;
+        Pthread_create(&tid, NULL, handle_client_thread, connfdp);
     }
     return 0;
+}
+
+void *handle_client_thread(void *vargp) {
+    int connfd = *((int *) vargp);
+    Free(vargp);
+
+    Pthread_detach(Pthread_self());
+    doit(connfd);
+    Close(connfd);
+
+    return NULL;
 }
 
 void print_full_html(rio_t rio, char buf[8192]) {
