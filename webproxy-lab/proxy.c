@@ -32,9 +32,9 @@ static bool is_header_name(const char *line, const char *name);
 static void append_header(char *headers, const char *line);
 static void create_default_host_header(const struct yuarel *url, char *host_line);
 static void create_request_line(const struct yuarel *url, char *request_line);
-static bool cache_serve(const char *uri, int fd);
-static void cache_insert(const char *uri, const char *object, size_t size);
-static int cache_find(const char *uri);
+static bool serve_from_cache(const char *cache_uri, int clientfd);
+static void store_in_cache(const char *cache_uri, const char *response_object, size_t response_size);
+static int find_cache_entry(const char *cache_uri);
 static int cache_pick_store_slot(void);
 
 /**
@@ -103,12 +103,12 @@ void print_full_html(rio_t rio, char buf[8192]) {
  *
  * @param fd 클라이언트 커넥션 socket descriptor
  */
-void doit(int fd) {
-    rio_t rio;
-    char buf[MAXLINE];
+void doit(int clientfd) {
+    rio_t client_rio;
+    char request_line_buf[MAXLINE];
 
-    Rio_readinitb(&rio, fd);
-    if (Rio_readlineb(&rio, buf, MAXLINE) <= 0) {
+    Rio_readinitb(&client_rio, clientfd);
+    if (Rio_readlineb(&client_rio, request_line_buf, MAXLINE) <= 0) {
         // \n 까지 읽기 (시작 줄 읽기)
         return;
     }
@@ -118,8 +118,8 @@ void doit(int fd) {
     char version[MAXLINE];
 
     // 시작 줄 분석
-    if (sscanf(buf, "%s %s %s", method, raw_uri, version) != 3) {
-        clienterror(fd, buf, "400", "Bad Request",
+    if (sscanf(request_line_buf, "%s %s %s", method, raw_uri, version) != 3) {
+        clienterror(clientfd, request_line_buf, "400", "Bad Request",
                     "Tiny could not parse the request line");
         return;
     }
@@ -129,17 +129,17 @@ void doit(int fd) {
     // 현재는 GET 만 지원함
     bool is_get_method = (strcasecmp(method, "GET") == 0);
     if (is_get_method == false) {
-        clienterror(fd, method, "501", "Not implemented",
+        clienterror(clientfd, method, "501", "Not implemented",
                     "Tiny does not implement this method");
         return;
     }
 
-    struct yuarel url = {0};
+    struct yuarel origin_url = {0};
 
-    bool is_succes_url_parse = yuarel_parse(&url, raw_uri) != -1;
-    if (is_succes_url_parse == false || url.host == NULL)
+    bool is_succes_url_parse = yuarel_parse(&origin_url, raw_uri) != -1;
+    if (is_succes_url_parse == false || origin_url.host == NULL)
     {
-        clienterror(fd, method, "400", "Bad Request",
+        clienterror(clientfd, method, "400", "Bad Request",
                     "TODO - proxy 요청 아님");
         return;
     }
@@ -153,48 +153,47 @@ void doit(int fd) {
     // printf("\tfragment:\t%s\n", url.fragment);
 
     char proxy_hdrs[MAXBUF];
-    create_proxy_requesthdrs(&rio, &url, proxy_hdrs);
+    create_proxy_requesthdrs(&client_rio, &origin_url, proxy_hdrs);
 
-    if (cache_serve(cache_key, fd)) {
+    if (serve_from_cache(cache_key, clientfd)) {
         return;
     }
 
-    //TODO: 이거 이름 target_ 말고 다른거 없나
-    int target_port_int = url.port == 0 ? 80 : url.port;
-    int clientfd;
-    char target_buf[MAXBUF];
-    rio_t target_rio;
+    int origin_port_int = origin_url.port == 0 ? 80 : origin_url.port;
+    int originfd;
+    char origin_response_buf[MAXBUF];
+    rio_t origin_rio;
 
     char origin_port[MAXLINE];
-    sprintf(origin_port, "%d", target_port_int);
-    clientfd = Open_clientfd(url.host, origin_port);
+    sprintf(origin_port, "%d", origin_port_int);
+    originfd = Open_clientfd(origin_url.host, origin_port);
 
-    char request_line[MAXLINE];
-    create_request_line(&url, request_line);
-    Rio_writen(clientfd, request_line, strlen(request_line));
-    Rio_writen(clientfd, proxy_hdrs, strlen(proxy_hdrs));
+    char origin_request_line[MAXLINE];
+    create_request_line(&origin_url, origin_request_line);
+    Rio_writen(originfd, origin_request_line, strlen(origin_request_line));
+    Rio_writen(originfd, proxy_hdrs, strlen(proxy_hdrs));
 
-    Rio_readinitb(&target_rio, clientfd);
-    ssize_t n;
-    char object_buf[MAX_OBJECT_SIZE];
-    size_t object_size = 0;
+    Rio_readinitb(&origin_rio, originfd);
+    ssize_t bytes_read;
+    char cache_object_buf[MAX_OBJECT_SIZE];
+    size_t cache_object_size = 0;
     bool can_cache = true;
 
-    while ((n = Rio_readnb(&target_rio, target_buf, MAXBUF)) > 0) {
-        Rio_writen(fd, target_buf, n);
+    while ((bytes_read = Rio_readnb(&origin_rio, origin_response_buf, MAXBUF)) > 0) {
+        Rio_writen(clientfd, origin_response_buf, bytes_read);
 
-        if (can_cache && object_size + n <= MAX_OBJECT_SIZE) {
-            memcpy(object_buf + object_size, target_buf, n);
-            object_size += n;
+        if (can_cache && cache_object_size + bytes_read <= MAX_OBJECT_SIZE) {
+            memcpy(cache_object_buf + cache_object_size, origin_response_buf, bytes_read);
+            cache_object_size += bytes_read;
         } else {
             can_cache = false;
         }
     }
 
-    Close(clientfd);
+    Close(originfd);
 
     if (can_cache) {
-        cache_insert(cache_key, object_buf, object_size);
+        store_in_cache(cache_key, cache_object_buf, cache_object_size);
     }
 }
 
@@ -310,17 +309,17 @@ static void create_request_line(const struct yuarel *url, char *request_line) {
 /**
  * @brief 캐시에 uri가 있으면 cached response를 클라이언트에 바로 전송합니다.
  *
- * @param uri 캐시 조회에 사용할 원본 요청 URI입니다.
- * @param fd cached response를 보낼 클라이언트 socket descriptor입니다.
+ * @param cache_uri 캐시 조회에 사용할 원본 요청 URI입니다.
+ * @param clientfd cached response를 보낼 클라이언트 socket descriptor입니다.
  * @return cache hit이면 true, cache miss이면 false를 반환합니다.
  */
-static bool cache_serve(const char *uri, int fd) {
+static bool serve_from_cache(const char *cache_uri, int clientfd) {
     // 읽기 락: 여러 스레드가 동시에 캐시를 읽는 것은 허용한다.
     pthread_rwlock_rdlock(&cache_lock);
 
-    int index = cache_find(uri);
+    int index = find_cache_entry(cache_uri);
     if (index >= 0) {
-        Rio_writen(fd, cache[index].object, cache[index].size);
+        Rio_writen(clientfd, cache[index].object, cache[index].size);
     }
 
     // 읽기 락 해제
@@ -331,42 +330,42 @@ static bool cache_serve(const char *uri, int fd) {
 /**
  * @brief response object를 캐시에 저장합니다.
  *
- * @param uri 캐시 key로 사용할 원본 요청 URI입니다.
- * @param object 저장할 response bytes입니다.
- * @param size 저장할 response 크기입니다.
+ * @param cache_uri 캐시 key로 사용할 원본 요청 URI입니다.
+ * @param response_object 저장할 response bytes입니다.
+ * @param response_size 저장할 response 크기입니다.
  */
-static void cache_insert(const char *uri, const char *object, size_t size) {
-    if (size > MAX_OBJECT_SIZE) {
+static void store_in_cache(const char *cache_uri, const char *response_object, size_t response_size) {
+    if (response_size > MAX_OBJECT_SIZE) {
         return;
     }
 
     // 쓰기 락: 캐시 슬롯을 덮어쓰는 동안 다른 reader/writer를 막는다.
     pthread_rwlock_wrlock(&cache_lock);
 
-    int index = cache_find(uri);
+    int index = find_cache_entry(cache_uri);
     if (index < 0) {
         index = cache_pick_store_slot();
     }
 
     cache[index].valid = true;
-    strncpy(cache[index].uri, uri, MAXLINE - 1);
+    strncpy(cache[index].uri, cache_uri, MAXLINE - 1);
     cache[index].uri[MAXLINE - 1] = '\0';
-    memcpy(cache[index].object, object, size);
-    cache[index].size = size;
+    memcpy(cache[index].object, response_object, response_size);
+    cache[index].size = response_size;
 
     // 쓰기 락 해제
     pthread_rwlock_unlock(&cache_lock);
 }
 
 /**
- * @brief uri에 해당하는 캐시 슬롯을 찾습니다.
+ * @brief cache_uri에 해당하는 캐시 슬롯을 찾습니다.
  *
- * @param uri 찾을 캐시 key입니다.
+ * @param cache_uri 찾을 캐시 key입니다.
  * @return 찾으면 슬롯 index, 없으면 -1을 반환합니다.
  */
-static int cache_find(const char *uri) {
+static int find_cache_entry(const char *cache_uri) {
     for (int i = 0; i < CACHE_ENTRY_COUNT; i++) {
-        if (cache[i].valid && strcmp(cache[i].uri, uri) == 0) {
+        if (cache[i].valid && strcmp(cache[i].uri, cache_uri) == 0) {
             return i;
         }
     }
