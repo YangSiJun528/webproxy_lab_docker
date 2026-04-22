@@ -15,6 +15,17 @@ typedef struct {
     size_t size;
 } cache_entry_t;
 
+/*
+ * Cache 구조:
+ * - cache는 고정 개수 슬롯 배열이다. 동적 할당 없이 각 슬롯이 최대
+ *   MAX_OBJECT_SIZE bytes의 response object를 저장한다.
+ * - 새 object는 next_cache_slot이 가리키는 슬롯에 저장하고, 다음 슬롯으로
+ *   이동한다. 끝까지 가면 0번 슬롯으로 돌아오는 circular FIFO 방식이다.
+ * - pthread_rwlock_t를 사용한다. read lock은 여러 스레드가 동시에 잡을 수
+ *   있지만, write lock이 잡혀 있으면 read/write 모두 대기한다.
+ * - 현재는 FIFO 정책이며, 나중에 LRU에 가깝게 바꾸려면
+ *   cache_pick_store_slot()의 슬롯 선택 방식만 교체하면 된다.
+ */
 static cache_entry_t cache[CACHE_ENTRY_COUNT];
 static int next_cache_slot = 0;
 static pthread_rwlock_t cache_lock = PTHREAD_RWLOCK_INITIALIZER;
@@ -155,6 +166,8 @@ void doit(int clientfd) {
     char proxy_hdrs[MAXBUF];
     create_proxy_requesthdrs(&client_rio, &origin_url, proxy_hdrs);
 
+    // 캐싱된 경로면 그대로 반환
+    // 실제면 멱등성이나 TTL 등 고려해야겠지만 지ㅇ
     if (serve_from_cache(cache_key, clientfd)) {
         return;
     }
@@ -182,6 +195,7 @@ void doit(int clientfd) {
     while ((bytes_read = Rio_readnb(&origin_rio, origin_response_buf, MAXBUF)) > 0) {
         Rio_writen(clientfd, origin_response_buf, bytes_read);
 
+        // 캐시 가능하면 계속 붙이기
         if (can_cache && cache_object_size + bytes_read <= MAX_OBJECT_SIZE) {
             memcpy(cache_object_buf + cache_object_size, origin_response_buf, bytes_read);
             cache_object_size += bytes_read;
@@ -192,6 +206,7 @@ void doit(int clientfd) {
 
     Close(originfd);
 
+    // 전채 응답이 캐시 가능한 사이즈면 저장
     if (can_cache) {
         store_in_cache(cache_key, cache_object_buf, cache_object_size);
     }
